@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Style gate for fin-dashboard.
+
+  Deliberately narrow: rules that catch real readability and correctness
+  problems, not rules that fight Spotless. Formatting (indentation, wrapping,
+  whitespace) is owned entirely by `mvn spotless:apply` and is NOT duplicated
+  here, so the two tools can never disagree.
+-->
+<module name="Checker">
+    <property name="severity" value="warning"/>
+    <property name="fileExtensions" value="java"/>
+
+    <!-- Files -->
+    <module name="FileTabCharacter">
+        <property name="eachLine" value="true"/>
+    </module>
+    <module name="NewlineAtEndOfFile"/>
+    <module name="RegexpSingleline">
+        <property name="format" value="\s+$"/>
+        <property name="message" value="Line has trailing whitespace."/>
+    </module>
+
+    <module name="SuppressionFilter">
+        <property name="file" value="config/checkstyle/suppressions.xml"/>
+    </module>
+
+    <!-- Makes @SuppressWarnings("checkstyle:RuleName") actually take effect. -->
+    <module name="SuppressWarningsFilter"/>
+
+    <module name="TreeWalker">
+        <!-- Allow targeted opt-outs via @SuppressWarnings("checkstyle:RuleName") -->
+        <module name="SuppressWarningsHolder"/>
+
+        <!-- Naming -->
+        <module name="PackageName"/>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="MemberName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <module name="ConstantName"/>
+        <module name="RecordComponentName"/>
+
+        <!-- Imports: Spotless orders them, Checkstyle forbids the bad ones -->
+        <module name="AvoidStarImport"/>
+        <module name="IllegalImport"/>
+        <module name="RedundantImport"/>
+        <module name="UnusedImports"/>
+
+        <!-- Size / complexity -->
+        <module name="MethodLength">
+            <property name="max" value="60"/>
+        </module>
+        <module name="ParameterNumber">
+            <property name="max" value="7"/>
+        </module>
+        <module name="CyclomaticComplexity">
+            <property name="max" value="10"/>
+        </module>
+        <module name="NPathComplexity"/>
+
+        <!-- Blocks -->
+        <module name="EmptyBlock">
+            <property name="option" value="text"/>
+        </module>
+        <module name="NeedBraces"/>
+        <module name="LeftCurly"/>
+        <module name="RightCurly"/>
+
+        <!-- Coding correctness -->
+        <module name="CovariantEquals"/>
+        <module name="EmptyStatement"/>
+        <module name="EqualsHashCode"/>
+        <module name="IllegalInstantiation"/>
+        <module name="MissingSwitchDefault"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="StringLiteralEquality"/>
+        <module name="NestedIfDepth">
+            <property name="max" value="3"/>
+        </module>
+        <module name="NestedTryDepth">
+            <property name="max" value="2"/>
+        </module>
+        <module name="OneStatementPerLine"/>
+        <module name="MultipleVariableDeclarations"/>
+        <module name="FallThrough"/>
+        <module name="DefaultComesLast"/>
+        <module name="IllegalCatch"/>
+        <module name="IllegalThrows"/>
+        <module name="EqualsAvoidNull"/>
+
+        <!-- Class design -->
+        <module name="FinalClass"/>
+        <module name="HideUtilityClassConstructor"/>
+        <module name="InterfaceIsType"/>
+        <module name="MutableException"/>
+        <module name="OneTopLevelClass"/>
+
+        <!-- Misc -->
+        <module name="ArrayTypeStyle"/>
+        <module name="UpperEll"/>
+        <module name="OuterTypeFilename"/>
+        <module name="TodoComment">
+            <property name="format" value="(TODO)|(FIXME)|(XXX)"/>
+        </module>
+    </module>
+</module>

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+    "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+    "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!--
+      Test classes are conventionally non-final holders of @Test methods and
+      frequently declare nested helper types; the class-design rules that make
+      sense for production code only add noise here.
+    -->
+    <suppress checks="HideUtilityClassConstructor|FinalClass|OneTopLevelClass"
+              files="[\\/]src[\\/]test[\\/]"/>
+
+    <!--
+      Spring Boot instantiates the @SpringBootApplication class as a bean, so it must keep a
+      public no-arg constructor even though `main` is its only method.
+    -->
+    <suppress checks="HideUtilityClassConstructor" files="DashboardApplication\.java"/>
+
+    <!--
+      JPA entities need a protected no-arg constructor and mutable fields to
+      satisfy Hibernate; they are framework artifacts, not domain types.
+    -->
+    <suppress checks="FinalClass" files="[\\/]infrastructure[\\/]persistence[\\/].*Entity\.java"/>
+</suppressions>

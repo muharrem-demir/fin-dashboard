@@ -1,0 +1,45 @@
+# Production. Every credential is a required environment variable with NO default: a missing value
+# must stop the application from starting rather than let it fall back to a development database.
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
+
+  jpa:
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      # Never expose component-level detail (driver versions, database names) to anonymous callers.
+      show-details: never
+  info:
+    env:
+      enabled: false
+
+springdoc:
+  # The API description is published from CI artifacts, not served from production.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+
+logging:
+  level:
+    root: WARN
+    com.forinvest.dashboard: INFO

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter xmlns="https://github.com/spotbugs/filter/3.0.0">
+
+    <!--
+      JPA entities expose mutable collections and are constructed reflectively
+      by Hibernate. EI_EXPOSE_REP on an entity is not a real defect: the entity
+      is a short-lived persistence artifact that never escapes the adapter.
+    -->
+    <Match>
+        <Class name="~com\.forinvest\.dashboard\.infrastructure\.persistence\..*Entity"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!--
+      Records that carry a List component: the domain copies defensively in its
+      compact constructor and returns unmodifiable views, which SpotBugs cannot
+      see through.
+    -->
+    <Match>
+        <Class name="~com\.forinvest\.dashboard\.domain\.model\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!--
+      Constructor injection is reported as EI_EXPOSE_REP2 because the collaborator is stored by
+      reference. That is precisely what dependency injection is: the use case is given a port and
+      keeps it. There is no defensive copy to make of an interface.
+    -->
+    <Match>
+        <Class name="~com\.forinvest\.dashboard\.application\.usecase\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!--
+      Response DTOs are records built from already-immutable lists (Stream.toList()), so the
+      accessor cannot hand out anything the caller can mutate.
+    -->
+    <Match>
+        <Class name="~com\.forinvest\.dashboard\.infrastructure\.web\.dto\..*"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Generated Spring configuration lambdas trip this with no benefit. -->
+    <Match>
+        <Bug pattern="SIC_INNER_SHOULD_BE_STATIC_ANON"/>
+    </Match>
+
+    <!-- Test sources are not shipped. -->
+    <Match>
+        <Source name="~.*[\\/]src[\\/]test[\\/].*"/>
+    </Match>
+
+</FindBugsFilter>

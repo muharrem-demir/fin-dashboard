@@ -1,0 +1,53 @@
+# Local stack: PostgreSQL plus the API.
+#
+#   docker compose up -d postgres     # database only, for running the app from your IDE
+#   docker compose up -d --build      # the whole stack
+#
+# Values come from .env when present; see .env.example. The defaults below are development
+# credentials for a throwaway local container and must not be used anywhere else.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: fin-dashboard-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-fin_dashboard}
+      POSTGRES_USER: ${DB_USERNAME:-dashboard}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dashboard}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18 wants the volume at /var/lib/postgresql, not .../data — it keeps the cluster in
+      # a subdirectory so `pg_upgrade --link` is not blocked by a mount-point boundary.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # The API waits on this, so it must report readiness to accept queries, not just liveness.
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-dashboard} -d ${DB_NAME:-fin_dashboard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fin-dashboard-api
+    depends_on:
+      postgres:
+        # Flyway runs at startup, so the database must be accepting connections first.
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-fin_dashboard}
+      DB_USERNAME: ${DB_USERNAME:-dashboard}
+      DB_PASSWORD: ${DB_PASSWORD:-dashboard}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -1,0 +1,84 @@
+# Settings shared by every environment. Anything environment-specific — above all credentials —
+# belongs in the profile files, never here.
+spring:
+  application:
+    name: fin-dashboard
+  profiles:
+    default: local
+
+  jpa:
+    # Flyway owns the schema. Hibernate only checks the entities still match it, so a migration
+    # that drifts from the mapping fails at startup instead of at the first query.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 25
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+
+  threads:
+    virtual:
+      enabled: true
+
+  jackson:
+    default-property-inclusion: non_null
+    datatype:
+      datetime:
+        # Spring Boot 4 ships Jackson 3, where this feature moved from SerializationFeature to
+        # DateTimeFeature. Timestamps go out as ISO-8601 strings, not epoch numbers.
+        write-dates-as-timestamps: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    # Errors are produced by GlobalExceptionHandler as RFC 9457 documents; the servlet container's
+    # own error page must never add stack traces or messages of its own.
+    include-stacktrace: never
+    include-message: never
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  info:
+    env:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+info:
+  application:
+    name: ${spring.application.name}
+    description: Financial stock portfolio dashboard API
+
+logging:
+  level:
+    root: INFO
+    com.forinvest.dashboard: INFO

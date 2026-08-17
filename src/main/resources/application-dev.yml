@@ -1,0 +1,25 @@
+# Shared development/staging deployment. Driven by environment variables, with defaults that match
+# the docker-compose stack so `docker compose up` works with no extra configuration.
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:fin_dashboard}
+    username: ${DB_USERNAME:dashboard}
+    password: ${DB_PASSWORD:dashboard}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+
+  jpa:
+    show-sql: false
+
+management:
+  endpoint:
+    health:
+      show-details: when_authorized
+
+springdoc:
+  swagger-ui:
+    enabled: true
+
+logging:
+  level:
+    com.forinvest.dashboard: DEBUG
