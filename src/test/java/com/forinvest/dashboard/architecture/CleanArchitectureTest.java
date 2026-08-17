@@ -29,8 +29,12 @@ class CleanArchitectureTest {
         "org.hibernate..",
         "io.swagger..",
         "com.fasterxml.jackson..",
+        "tools.jackson..",
         "org.flywaydb..",
-        "org.slf4j.."
+        "org.slf4j..",
+        // The market-data library is an infrastructure detail like any other: the domain defines
+        // StockQuoteProvider, and only the adapter may know who implements it.
+        "yahoofinance.."
     };
 
     /** Dependencies point inward only. */

@@ -8,11 +8,32 @@ description: Add a new use case to fin-dashboard without breaking the clean-arch
 Work outward from the domain. Each step is testable before the next one exists, and the order is
 what keeps business rules from drifting into the framework.
 
+## 0. Which shape is this?
+
+**A write against a portfolio** — follow every step below.
+
+**A read that reaches outside the process** (market data, another service): there is no aggregate
+to load and no transaction. Skip steps 2, 7 and part of 4, and instead:
+
+- add an outbound port to `domain/port/`, declared purely in domain types
+  (see `StockQuoteProvider`);
+- put the calculation in a domain value object (see `StockQuote.percentChange()`);
+- put the input record in `application/query/`, not `application/command/` — it changes nothing;
+- write the adapter in its own `infrastructure/` sub-package (see `infrastructure/quotes/`), and
+  make it translate every vendor failure into a domain exception so vendor types stop there;
+- **add the vendor's package to `FRAMEWORK_PACKAGES` in `CleanArchitectureTest`** so it can never
+  leak inward.
+
+`ListStockQuotesUseCase` is the worked example of this shape.
+
 ## 1. Decide where the rule lives
 
 If the operation involves any decision about portfolio state — what happens when the ticker is
 already held, whether a position may go to zero, what counts as valid — **that decision belongs in
 `Portfolio`**, as a method returning a new `Portfolio`.
+
+Any *calculation* belongs in the domain too, on the value object it concerns. Percent change lives
+in `StockQuote`, not in a mapper or the adapter that fetched the numbers.
 
 A use case may only sequence: load, call one domain method, save. If you are writing an `if` about
 portfolio state inside a use case, move it into the aggregate.
@@ -72,9 +93,10 @@ Add a `@Bean` method. This is the only place the use case meets Spring.
 
 - Request/response records in `dto/`, with `jakarta.validation` constraints and `@Schema`
   descriptions — the OpenAPI document is generated from these.
-- Add the endpoint to `PortfolioController` (portfolio itself) or `PortfolioStockController`
-  (holdings). If a controller passes ~6 constructor parameters, split it by resource rather than
-  suppressing the Checkstyle warning.
+- Add the endpoint to the controller for that resource — `PortfolioController` (portfolios),
+  `PortfolioStockController` (holdings) or `StockQuoteController` (market data). If a controller
+  reaches ~6 constructor parameters, split it by resource rather than suppressing the Checkstyle
+  warning.
 - **No try/catch.** Let exceptions reach `GlobalExceptionHandler`.
 - Annotate with `@Operation` and `@ApiResponses` including the error codes.
 
@@ -86,9 +108,13 @@ errors, problem documents.
 New file `src/main/resources/db/migration/V{n}__description.sql`. Never edit an applied migration.
 `ddl-auto: validate` means a mismatch with the entities fails startup.
 
-## 8. Integration test (`integration/PortfolioApiIT.java`)
+## 8. Integration test (`integration/`)
 
-Add a case that exercises the operation over HTTP against real PostgreSQL.
+Add a case that exercises the operation over HTTP against real PostgreSQL — `PortfolioApiIT` for
+portfolio operations, `StockQuoteApiIT` for quotes.
+
+**Never call a third-party service from a test.** Replace the port with `@MockitoBean`, as
+`StockQuoteApiIT` does. A build must not fail because someone else's API was down or rate-limited.
 
 ## 9. Verify
 

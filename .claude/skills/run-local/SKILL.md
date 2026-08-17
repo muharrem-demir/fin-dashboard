@@ -62,6 +62,28 @@ curl -s $BASE/portfolios/00000000-0000-0000-0000-000000000000 | jq   # 404
 curl -sX POST $BASE/portfolios -H 'Content-Type: application/json' -d '{"name":""}' | jq  # 400 + errors[]
 ```
 
+## Market quotes
+
+```bash
+curl -s "$BASE/stocks/quotes?tickers=AAPL,MSFT,NOSUCH" | jq
+curl -s "$BASE/stocks/quotes?tickers=AAPL&tickers=MSFT" | jq   # repeated params also work
+curl -s "$BASE/stocks/quotes?tickers=1BAD!" | jq               # 400 invalid-ticker
+```
+
+Expect `quotes[]` with `price` and `percentChange`, plus `unresolved[]` for symbols the provider
+had no data for.
+
+**A 502 here is expected, not a bug in the app.** Yahoo's public quote endpoint rejects
+unauthenticated callers (HTTP 401/429), so the live call often fails:
+
+```json
+{ "type": "https://api.forinvest.com/problems/stock-quotes-unavailable", "status": 502 }
+```
+
+Check `docker compose logs api` (or the console) for the logged cause. To demo the endpoint without
+Yahoo, run `StockQuoteApiIT`, which stubs the `StockQuoteProvider` port and asserts the real
+percent-change output.
+
 ## Inspecting the database
 
 ```bash

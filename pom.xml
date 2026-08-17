@@ -33,6 +33,7 @@
         <!-- Library versions not managed by the Spring Boot BOM -->
         <springdoc.version>3.1.0</springdoc.version>
         <archunit.version>1.5.0</archunit.version>
+        <yahoofinance.version>3.17.0</yahoofinance.version>
 
         <!-- Coverage thresholds enforced on domain + application -->
         <jacoco.line.coverage>0.80</jacoco.line.coverage>
@@ -80,6 +81,22 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            Yahoo Finance quotes. The library pins an ancient SLF4J 1.x API, which would shadow the
+            2.x binding Spring Boot ships and silently disable logging; Boot's version must win.
+        -->
+        <dependency>
+            <groupId>com.yahoofinance-api</groupId>
+            <artifactId>YahooFinanceAPI</artifactId>
+            <version>${yahoofinance.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Test -->

@@ -38,6 +38,13 @@ spring:
         # DateTimeFeature. Timestamps go out as ISO-8601 strings, not epoch numbers.
         write-dates-as-timestamps: false
 
+dashboard:
+  quotes:
+    yahoo:
+      # Upstream calls are made on request threads, so this timeout bounds how long a quote request
+      # can hang. The library reads it once at class-initialisation time.
+      connection-timeout-millis: ${QUOTES_TIMEOUT_MS:10000}
+
 server:
   port: ${SERVER_PORT:8080}
   error:

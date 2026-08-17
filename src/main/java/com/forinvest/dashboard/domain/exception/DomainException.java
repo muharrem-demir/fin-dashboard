@@ -8,10 +8,12 @@ package com.forinvest.dashboard.domain.exception;
  */
 public abstract sealed class DomainException extends RuntimeException
         permits InvalidPortfolioNameException,
+                InvalidQuoteRequestException,
                 InvalidShareCountException,
                 InvalidTickerException,
                 PortfolioNotFoundException,
-                StockNotFoundException {
+                StockNotFoundException,
+                StockQuoteUnavailableException {
 
     protected DomainException(String message) {
         super(message);

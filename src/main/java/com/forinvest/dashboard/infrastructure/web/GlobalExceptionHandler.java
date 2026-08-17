@@ -26,10 +26,12 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import com.forinvest.dashboard.domain.exception.DomainException;
 import com.forinvest.dashboard.domain.exception.InvalidPortfolioNameException;
+import com.forinvest.dashboard.domain.exception.InvalidQuoteRequestException;
 import com.forinvest.dashboard.domain.exception.InvalidShareCountException;
 import com.forinvest.dashboard.domain.exception.InvalidTickerException;
 import com.forinvest.dashboard.domain.exception.PortfolioNotFoundException;
 import com.forinvest.dashboard.domain.exception.StockNotFoundException;
+import com.forinvest.dashboard.domain.exception.StockQuoteUnavailableException;
 
 /**
  * Translates every failure into an RFC 9457 problem document.
@@ -68,6 +70,19 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 HttpStatus.BAD_REQUEST,
                                 "Invalid portfolio name",
                                 "invalid-portfolio-name",
+                                e.getMessage());
+                    case InvalidQuoteRequestException e ->
+                        problem(
+                                HttpStatus.BAD_REQUEST,
+                                "Invalid quote request",
+                                "invalid-quote-request",
+                                e.getMessage());
+                    // The caller did nothing wrong — the market data provider did. 502, not 500.
+                    case StockQuoteUnavailableException e ->
+                        problem(
+                                HttpStatus.BAD_GATEWAY,
+                                "Stock quotes unavailable",
+                                "stock-quotes-unavailable",
                                 e.getMessage());
                 };
         return withRequestContext(problem, request);

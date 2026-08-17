@@ -9,9 +9,11 @@ import com.forinvest.dashboard.application.usecase.CreatePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.DeletePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.GetPortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.ListPortfoliosUseCase;
+import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
 import com.forinvest.dashboard.application.usecase.RemoveStockUseCase;
 import com.forinvest.dashboard.application.usecase.RenamePortfolioUseCase;
 import com.forinvest.dashboard.domain.port.PortfolioRepository;
+import com.forinvest.dashboard.domain.port.StockQuoteProvider;
 
 /**
  * Wires the use cases into the Spring context.
@@ -59,5 +61,10 @@ class UseCaseConfig {
     RemoveStockUseCase removeStockUseCase(
             PortfolioRepository portfolioRepository, TransactionRunner transactionRunner) {
         return new RemoveStockUseCase(portfolioRepository, transactionRunner);
+    }
+
+    @Bean
+    ListStockQuotesUseCase listStockQuotesUseCase(StockQuoteProvider stockQuoteProvider) {
+        return new ListStockQuotesUseCase(stockQuoteProvider);
     }
 }
