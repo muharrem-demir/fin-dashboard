@@ -239,6 +239,24 @@ The live feed is configured under `dashboard.quotes.stream`:
 The interval is the gap *between* ticks: a tick starts once the previous one has finished, so a
 slow upstream call delays the next update instead of stacking concurrent requests on the provider.
 
+Browser access is configured under `dashboard.web.cors`:
+
+| Property           | Env var                  | Default                        | Meaning                            |
+| ------------------ | ------------------------ | ------------------------------ | ---------------------------------- |
+| `path-pattern`     | —                        | `/api/v1/**`                   | the paths CORS applies to          |
+| `allowed-origins`  | `CORS_ALLOWED_ORIGINS`   | `*`                            | origin patterns allowed to call it |
+| `allowed-methods`  | —                        | `GET,POST,PATCH,DELETE,OPTIONS`| methods a browser may use          |
+| `allowed-headers`  | —                        | `*`                            | request headers a browser may send |
+| `exposed-headers`  | —                        | `Location`                     | response headers a browser may read |
+| `allow-credentials`| `CORS_ALLOW_CREDENTIALS` | `false`                        | whether cookies may be sent        |
+| `max-age-seconds`  | —                        | `3600`                         | how long a preflight answer is cached |
+
+Set once in `WebCorsConfig`, never with `@CrossOrigin` on a controller — one answer to "who may call
+this API", and an endpoint added tomorrow is covered without anyone remembering to annotate it.
+`Location` is exposed because creating a portfolio answers 201 with that header and nothing else,
+and a browser cannot read a header that is not exposed. The WebSocket handshake is not a CORS
+request; its origins are the separate `dashboard.quotes.stream.allowed-origins`.
+
 The schema is owned by Flyway (`src/main/resources/db/migration`); Hibernate runs with
 `ddl-auto: validate`, so a migration that drifts from the entity mapping fails at startup.
 

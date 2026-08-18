@@ -39,6 +39,21 @@ spring:
         write-dates-as-timestamps: false
 
 dashboard:
+  web:
+    cors:
+      # Browser access to the REST API. Public market data and no authentication, so the default is
+      # as open as the API itself; narrow allowed-origins when a deployment needs it. Origins are
+      # matched as patterns, so a restricted list still works if credentials are ever turned on.
+      path-pattern: /api/v1/**
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+      allowed-methods: GET,POST,PATCH,DELETE,OPTIONS
+      allowed-headers: "*"
+      # POST /portfolios answers 201 with nothing but a Location header; a browser cannot read it
+      # cross-origin unless it is exposed here.
+      exposed-headers: Location
+      allow-credentials: ${CORS_ALLOW_CREDENTIALS:false}
+      max-age-seconds: 3600
+
   quotes:
     yahoo:
       # Upstream calls are made on request threads, so this timeout bounds how long a quote request

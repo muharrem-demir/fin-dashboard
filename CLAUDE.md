@@ -140,6 +140,29 @@ Every error is an RFC 9457 problem document produced by `GlobalExceptionHandler`
 contain no error handling. The handler switches exhaustively over the sealed `DomainException`
 hierarchy, so **adding a domain exception without mapping it to a status code is a compile error**.
 
+## Browser access (CORS)
+
+One registration in `WebCorsConfig` (`infrastructure/web/`) covers everything under
+`dashboard.web.cors.path-pattern` (default `/api/v1/**`). **No `@CrossOrigin` on a controller or a
+handler** — an annotation makes the policy a property of whoever remembered to add it, and an
+endpoint added later would inherit nothing.
+
+Open by default (`allowed-origins: *`, env `CORS_ALLOWED_ORIGINS`), matching the WebSocket feed:
+public market data, no authentication, so an origin restriction here would protect nothing that is
+not already public. Credentials are off.
+
+Two details that are decisions, not defaults:
+
+- Origins are registered as **`allowedOriginPatterns`, never `allowedOrigins`**. A literal `*` and
+  credentials are illegal together, so the open default would break the moment a deployment turned
+  credentials on; a pattern echoes the caller's origin instead and keeps working.
+- **`Location` is exposed.** `POST /portfolios` answers 201 with that header and nothing else, and a
+  browser cannot read an unexposed header — a cross-origin client would be unable to find the
+  portfolio it just created.
+
+CORS does not cover the live feed: a WebSocket handshake is not a CORS request, and its origins are
+checked by the handshake itself through `dashboard.quotes.stream.allowed-origins`.
+
 ## Market quotes
 
 `GET /api/v1/stocks/quotes?tickers=…` fetches every requested symbol in **one** upstream call —
