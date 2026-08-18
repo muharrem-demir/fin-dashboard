@@ -42,7 +42,8 @@ dashboard:
   quotes:
     yahoo:
       # Upstream calls are made on request threads, so this timeout bounds how long a quote request
-      # can hang. The library reads it once at class-initialisation time.
+      # can hang. Applied to the connect and to each individual call, including the cookie/crumb
+      # handshake the quote endpoint requires.
       connection-timeout-millis: ${QUOTES_TIMEOUT_MS:10000}
 
     stream:

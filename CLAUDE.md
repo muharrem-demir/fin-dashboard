@@ -59,7 +59,7 @@ com.forinvest.dashboard
 │   └── port/        TransactionRunner
 └── infrastructure/  every framework lives here, and only here
     ├── persistence/ JPA entities, adapter, mapper — all package-private
-    ├── quotes/      Yahoo Finance adapter + its settings — package-private
+    ├── quotes/      Yahoo Finance adapter, its crumb session + settings — package-private
     ├── subscription/ in-memory QuoteSubscriptionRegistry adapter — package-private
     ├── websocket/   handler, sessions, publisher, scheduler, message DTOs
     ├── web/         controllers, DTOs, GlobalExceptionHandler
@@ -69,8 +69,9 @@ com.forinvest.dashboard
 ### Rules that are mechanically enforced
 
 - `domain` depends on nothing but the JDK. No `@Entity`, no `@Component`, no annotations at all —
-  and no `yahoofinance..` either; the market-data library is an infrastructure detail like any
-  other, and `CleanArchitectureTest` enforces that.
+  and no `yahoofinance..` either — that rule outlived the library itself and is kept as a guard: a
+  market-data client is an infrastructure detail like any other, and `CleanArchitectureTest` will
+  fail the build if one is ever reintroduced inward.
 - `application` depends on `domain` only. **Use cases carry no Spring annotations** — they are
   registered as beans in `infrastructure/config/UseCaseConfig.java`.
 - Transactions do not leak inward. Read-modify-write use cases take the `TransactionRunner` port;
@@ -153,16 +154,29 @@ client can tell "no data" from "not asked for".
 `YahooFinanceStockQuoteAdapter` is the anti-corruption layer that translates every upstream failure
 — checked or unchecked — into `StockQuoteUnavailableException`.
 
-> **Known limitation.** Yahoo's public quote endpoint now rejects unauthenticated callers
-> (HTTP 401/429), so this endpoint can legitimately return 502 against the live service. The
-> integration is complete and correct on our side; what is missing is credentialed access. Because
-> everything above the port speaks `StockQuoteProvider`, replacing the provider is a one-class
-> change — write a new adapter and rebind the bean in `UseCaseConfig`. No domain, use case, or
-> controller code changes.
+**Yahoo's quote endpoint requires a cookie and a crumb.** An anonymous `GET /v7/finance/quote` is
+answered with HTTP 401. Access is regained by visiting a Yahoo host for a session cookie, then
+exchanging that cookie for a short opaque crumb that every quote request carries; the two are a
+pair, and a crumb requested without the cookie comes back as `Invalid Cookie`.
+
+`YahooCrumbSession` owns that handshake. The pair is cached — re-fetching it per quote would turn
+one upstream call into three — and refreshed only when the quote endpoint rejects it, which the
+adapter answers with one fresh handshake and one retry. A crumb expires without warning and an
+expired one is indistinguishable from an invalid one, so that retry is what keeps an expiry from
+surfacing as an outage.
+
+This is why the adapter calls the endpoint directly instead of using `yahoofinance-api`: that
+library issues the quote call unauthenticated, and its crumb support exists only on the
+historical-download path where the quote call cannot reach it. The dependency is gone.
+
+The `HttpClient` and its cookie jar are built in `QuoteProviderConfig` and deliberately **not**
+exposed as a bean. The jar is the other half of the crumb; one cleared or refilled by unrelated
+traffic would invalidate the crumb without the adapter knowing.
 
 Timeout: `dashboard.quotes.yahoo.connection-timeout-millis` (env `QUOTES_TIMEOUT_MS`, default
-10 000). The library reads it once at class-initialisation time, which is why the adapter sets the
-system property in its constructor.
+10 000), applied to the connect and to each request. The endpoints are configurable too
+(`quote-url`, `crumb-url`, `cookie-url`, `user-agent`) so a test can point at a stub; they are not
+expected to be set in normal operation.
 
 ## Realtime quote streaming
 
@@ -234,15 +248,18 @@ Note: Spring Boot 4 splits auto-configuration per technology. Flyway needs
 | `domain/`                   | plain JUnit, no mocks                       | no     |
 | `application/usecase/`      | Mockito on the ports                        | no     |
 | `infrastructure/web/`       | `@WebMvcTest` with mocked use cases         | no     |
-| `infrastructure/quotes/`    | `Mockito.mockStatic(YahooFinance.class)`    | no     |
+| `infrastructure/quotes/`    | stub HTTP server on loopback                | no     |
 | `infrastructure/websocket/` | Mockito on the use cases and the session    | no     |
 | `integration/`              | `@SpringBootTest` + real PostgreSQL         | **yes**|
 | `architecture/`             | ArchUnit                                    | no     |
 
 **No test ever calls Yahoo.** A third party rate-limiting us must not fail the build, and live
 market data is not deterministic enough to assert on. `StockQuoteApiIT` and `QuoteStreamIT` replace
-the `StockQuoteProvider` bean with `@MockitoBean`; `YahooFinanceStockQuoteAdapterTest` stubs the
-library's static entry point. The only untested link is the live Yahoo call itself.
+the `StockQuoteProvider` bean with `@MockitoBean`; `YahooFinanceStockQuoteAdapterTest` runs the real
+adapter against a `com.sun.net.httpserver.HttpServer` stub on loopback that imitates the cookie,
+crumb and quote endpoints. A stub rather than a mocked `HttpClient`, because the part most likely to
+break is the handshake itself, and canned responses would only prove we wrote the code we wrote. The
+only untested link is the live Yahoo call itself.
 
 `QuoteStreamIT` opens real WebSocket connections to a real server (`RANDOM_PORT` +
 `StandardWebSocketClient`) and shortens the tick to 200 ms. Two rules keep it from flaking: the
@@ -282,8 +299,9 @@ These cost time once; they are written down so they do not cost it again.
 - Testcontainers 2.x renamed every module (`testcontainers-postgresql`, not `postgresql`), moved
   `PostgreSQLContainer` to `org.testcontainers.postgresql`, and dropped its self-type generic —
   write `PostgreSQLContainer`, not `PostgreSQLContainer<?>`.
-- `yahoofinance-api` pins SLF4J 1.x, which would shadow Boot's 2.x binding and silently disable
-  logging. The dependency excludes `org.slf4j:slf4j-api` so Boot's version wins.
+- `yahoofinance-api` was dropped (see "Market quotes"). It also pinned SLF4J 1.x, which would shadow
+  Boot's 2.x binding and silently disable logging; that exclusion went with it. Watch for the same
+  trap in any library added to replace it.
 - Jackson 3's exceptions are unchecked: `JacksonException extends RuntimeException`, so reading or
   writing JSON by hand needs no `throws`. Boot auto-configures a `tools.jackson.databind.json.JsonMapper`
   bean — inject that, not an `ObjectMapper`, and the stream gets the same date and inclusion
