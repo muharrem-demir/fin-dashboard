@@ -32,11 +32,12 @@
     </Match>
 
     <!--
-      Response DTOs are records built from already-immutable lists (Stream.toList()), so the
-      accessor cannot hand out anything the caller can mutate.
+      Response DTOs are records built from already-immutable lists (Stream.toList(), List.copyOf),
+      so the accessor cannot hand out anything the caller can mutate. The WebSocket messages are
+      the same DTOs inside a streaming envelope.
     -->
     <Match>
-        <Class name="~com\.forinvest\.dashboard\.infrastructure\.web\.dto\..*"/>
+        <Class name="~com\.forinvest\.dashboard\.infrastructure\.(web|websocket)\.dto\..*"/>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
     </Match>
 

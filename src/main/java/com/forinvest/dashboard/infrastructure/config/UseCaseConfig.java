@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 
 import com.forinvest.dashboard.application.port.TransactionRunner;
 import com.forinvest.dashboard.application.usecase.AddStockUseCase;
+import com.forinvest.dashboard.application.usecase.BroadcastQuoteUpdatesUseCase;
 import com.forinvest.dashboard.application.usecase.CreatePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.DeletePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.GetPortfolioUseCase;
@@ -12,7 +13,11 @@ import com.forinvest.dashboard.application.usecase.ListPortfoliosUseCase;
 import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
 import com.forinvest.dashboard.application.usecase.RemoveStockUseCase;
 import com.forinvest.dashboard.application.usecase.RenamePortfolioUseCase;
+import com.forinvest.dashboard.application.usecase.SubscribeToQuotesUseCase;
+import com.forinvest.dashboard.application.usecase.UnsubscribeFromQuotesUseCase;
 import com.forinvest.dashboard.domain.port.PortfolioRepository;
+import com.forinvest.dashboard.domain.port.QuoteSubscriptionRegistry;
+import com.forinvest.dashboard.domain.port.QuoteUpdatePublisher;
 import com.forinvest.dashboard.domain.port.StockQuoteProvider;
 
 /**
@@ -66,5 +71,23 @@ class UseCaseConfig {
     @Bean
     ListStockQuotesUseCase listStockQuotesUseCase(StockQuoteProvider stockQuoteProvider) {
         return new ListStockQuotesUseCase(stockQuoteProvider);
+    }
+
+    @Bean
+    SubscribeToQuotesUseCase subscribeToQuotesUseCase(QuoteSubscriptionRegistry quoteSubscriptionRegistry) {
+        return new SubscribeToQuotesUseCase(quoteSubscriptionRegistry);
+    }
+
+    @Bean
+    UnsubscribeFromQuotesUseCase unsubscribeFromQuotesUseCase(QuoteSubscriptionRegistry quoteSubscriptionRegistry) {
+        return new UnsubscribeFromQuotesUseCase(quoteSubscriptionRegistry);
+    }
+
+    @Bean
+    BroadcastQuoteUpdatesUseCase broadcastQuoteUpdatesUseCase(
+            QuoteSubscriptionRegistry quoteSubscriptionRegistry,
+            StockQuoteProvider stockQuoteProvider,
+            QuoteUpdatePublisher quoteUpdatePublisher) {
+        return new BroadcastQuoteUpdatesUseCase(quoteSubscriptionRegistry, stockQuoteProvider, quoteUpdatePublisher);
     }
 }

@@ -28,6 +28,11 @@ Flag:
 - validation duplicated between a DTO and the domain, where the two could disagree
 - **any reimplementation of the additive-upsert rule** outside `Portfolio.addStock` — including a
   SQL `ON CONFLICT ... DO UPDATE`, which would move the rule into the database
+- **fan-out decided outside the domain**: filtering quotes per client in `QuoteStreamHandler`,
+  `WebSocketQuoteUpdatePublisher` or `QuoteBroadcastScheduler` instead of
+  `QuoteSubscription.select(...)`; building the fetch list anywhere but
+  `QuoteSubscriptions.tickers()`; a per-client call to `StockQuoteProvider`, which turns one
+  upstream call per tick into one per connection
 
 State the rule that leaked, where it went, and where it belongs.
 
@@ -46,15 +51,30 @@ State the rule that leaked, where it went, and where it belongs.
 - a read-modify-write sequence with no transaction around it
 - a new query on `PortfolioJpaRepository` that returns entities to a caller outside the adapter
 
-### 4. Error handling
+### 4. The live feed
+
+- a scheduled method that does anything beyond calling `BroadcastQuoteUpdatesUseCase.execute()`
+- `fixedRate` where `fixedDelay` belongs — ticks would stack up behind a slow provider
+- state about who is subscribed kept in the transport instead of behind `QuoteSubscriptionRegistry`
+- a raw `WebSocketSession.sendMessage` outside `QuoteStreamSessions`: two threads write to a
+  session, so every send must go through the decorated one
+- a delivery failure that escapes the publisher — one dead connection must not cost the other
+  subscribers their update
+- a bad client message that closes the connection instead of answering with an `error` frame
+- a provider outage reported as anything other than an `unavailable` frame followed by a normal
+  next tick
+
+### 5. Error handling
 
 - `try`/`catch` in a controller instead of letting `GlobalExceptionHandler` handle it
 - a new `DomainException` subtype that is not in the `permits` clause, or not mapped to a status
 - exception messages that would leak internals to a client
 
-### 5. Test coverage of the change
+### 6. Test coverage of the change
 
 - a new domain rule without a plain-JUnit test
+- a change to the feed with no `QuoteStreamIT` case, or an IT that re-stubs the provider mock while
+  the scheduler is running (a race) rather than steering a single stubbed answer
 - a use case tested only through the web layer
 - a schema change with no integration test touching it
 

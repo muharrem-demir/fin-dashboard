@@ -13,11 +13,14 @@ import com.forinvest.dashboard.infrastructure.web.dto.StockQuotesResponse;
  *
  * <p>The percent change is read from the domain, never recomputed here — there must be exactly one
  * definition of that formula in the system.
+ *
+ * <p>Public because the WebSocket feed pushes the same quotes this endpoint returns. One mapper
+ * means a quote has one JSON shape whether a client polls for it or is pushed it.
  */
 @Component
-class StockQuoteWebMapper {
+public class StockQuoteWebMapper {
 
-    StockQuotesResponse toResponse(StockQuoteLookup lookup) {
+    public StockQuotesResponse toResponse(StockQuoteLookup lookup) {
         return new StockQuotesResponse(
                 lookup.quotes().stream()
                         .map(StockQuoteWebMapper::toQuoteResponse)

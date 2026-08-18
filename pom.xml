@@ -57,6 +57,16 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!--
+            Realtime quote streaming. Brings spring-websocket and the Boot auto-configuration that
+            registers a handler on the embedded Tomcat; the raw WebSocket API is enough here
+            because every client drives its own subscription over its own connection, so there is
+            no broker or STOMP destination model to model.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springdoc</groupId>

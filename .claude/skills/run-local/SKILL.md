@@ -84,6 +84,39 @@ Check `docker compose logs api` (or the console) for the logged cause. To demo t
 Yahoo, run `StockQuoteApiIT`, which stubs the `StockQuoteProvider` port and asserts the real
 percent-change output.
 
+## The live feed
+
+```bash
+websocat ws://localhost:8080/ws/quotes     # or: npx wscat -c ws://localhost:8080/ws/quotes
+```
+
+Then type:
+
+```json
+{"action":"subscribe","tickers":["AAPL","MSFT"]}
+{"action":"subscribe","tickers":["TSLA"]}
+{"action":"unsubscribe"}
+```
+
+Expect a `connected` frame on connect, a `subscribed` ack, then a `quotes` frame every three
+seconds. The second `subscribe` **replaces** the first — the next tick carries TSLA only.
+
+Open two clients to see that each connection has its own watchlist. Nothing is fetched at all while
+nobody is subscribed, so an idle app makes no upstream calls.
+
+The same Yahoo limitation applies: when the provider refuses, the feed pushes
+`{"type":"unavailable", ...}` instead of `quotes`, keeps the connection open, and retries on the
+next tick. A bad symbol gives `{"type":"error", ...}` and leaves the previous subscription intact.
+
+To demo the feed without Yahoo, run `QuoteStreamIT` — it stubs the port and asserts on real pushed
+frames.
+
+Shorten the interval while poking at it:
+
+```bash
+QUOTES_STREAM_INTERVAL_MS=1000 ./mvnw spring-boot:run
+```
+
 ## Inspecting the database
 
 ```bash
@@ -98,6 +131,10 @@ docker compose exec postgres psql -U dashboard -d fin_dashboard \
   `spring-boot-starter-flyway` is still a dependency; `flyway-core` alone does nothing in Boot 4.
 - **Connection refused** — Postgres is not healthy yet. `docker compose ps`.
 - **Port 8080 in use** — `SERVER_PORT=8081 ./mvnw spring-boot:run`.
+- **WebSocket handshake rejected (403)** — the origin is not allowed. `QUOTES_STREAM_ALLOWED_ORIGINS`
+  defaults to `*`; a narrowed value has to list the page's origin.
+- **Connected but no `quotes` frames** — nothing was subscribed, or every symbol was invalid. Check
+  for an `error` frame; a `subscribed` ack echoes what the server thinks you are watching.
 - **Schema drift after editing a migration** — never edit an applied one. Reset the local database:
   `docker compose down -v && docker compose up -d postgres`.
 

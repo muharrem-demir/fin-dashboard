@@ -116,6 +116,29 @@ class CleanArchitectureTest {
             .resideInAPackage("com.forinvest.dashboard.infrastructure.persistence..")
             .because("the web layer must go through use cases, never straight to the database");
 
+    /** The streaming transport is a transport: it drives use cases, exactly like a controller. */
+    @ArchTest
+    static final ArchRule STREAMING_DOES_NOT_TOUCH_PERSISTENCE = ArchRuleDefinition.noClasses()
+            .that()
+            .resideInAPackage("com.forinvest.dashboard.infrastructure.websocket..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("com.forinvest.dashboard.infrastructure.persistence..")
+            .because("pushing quotes is a transport concern; storage is reached through use cases");
+
+    /**
+     * The feed is periodic, so a rule that leaked into it would be wrong several times a minute
+     * rather than once per request.
+     */
+    @ArchTest
+    static final ArchRule ONLY_INFRASTRUCTURE_SCHEDULES_WORK = ArchRuleDefinition.noClasses()
+            .that()
+            .resideInAnyPackage(DOMAIN, APPLICATION)
+            .should()
+            .dependOnClassesThat()
+            .resideInAnyPackage("org.springframework.scheduling..", "org.springframework.web.socket..")
+            .because("when work runs, and how it reaches a client, are infrastructure decisions");
+
     @ArchTest
     static final ArchRule NO_PACKAGE_CYCLES =
             slices().matching("com.forinvest.dashboard.(*)..").should().beFreeOfCycles();

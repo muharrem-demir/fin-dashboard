@@ -26,6 +26,22 @@ to load and no transaction. Skip steps 2, 7 and part of 4, and instead:
 
 `ListStockQuotesUseCase` is the worked example of this shape.
 
+**Something the application pushes out on its own** (a periodic broadcast, a notification): there is
+no request to answer, so nothing may be returned to a caller. Instead:
+
+- decide *who gets what* in the domain, on a value object — the union of watched symbols lives in
+  `QuoteSubscriptions.tickers()`, the per-client slice in `QuoteSubscription.select(...)`;
+- add an outbound port for the delivery (`QuoteUpdatePublisher`) and, if the application has to
+  remember who is listening, one for that too (`QuoteSubscriptionRegistry`), both in domain types;
+- the use case takes no command and returns a count: read the registry, return early when it is
+  empty, make **one** call outward, publish per subscriber;
+- put the clock in infrastructure. `QuoteBroadcastScheduler` is a `@Scheduled` method that calls
+  `execute()` and does nothing else — use `fixedDelay`, so a slow call cannot stack ticks;
+- swallow delivery failures in the adapter. One dead connection must not cost the other subscribers
+  their update, which is why the port's implementations never throw.
+
+`BroadcastQuoteUpdatesUseCase` plus `infrastructure/websocket/` is the worked example of this shape.
+
 ## 1. Decide where the rule lives
 
 If the operation involves any decision about portfolio state — what happens when the ticker is
@@ -89,7 +105,7 @@ saved with an `ArgumentCaptor`, and that nothing is saved on the failure paths.
 
 Add a `@Bean` method. This is the only place the use case meets Spring.
 
-## 6. Web (`infrastructure/web/`)
+## 6. Web (`infrastructure/web/`) — or the stream (`infrastructure/websocket/`)
 
 - Request/response records in `dto/`, with `jakarta.validation` constraints and `@Schema`
   descriptions — the OpenAPI document is generated from these.
@@ -103,6 +119,12 @@ Add a `@Bean` method. This is the only place the use case meets Spring.
 Test with `@WebMvcTest` + `@MockitoBean` on the use cases: status codes, JSON shape, validation
 errors, problem documents.
 
+For a message on the live feed instead of an endpoint: add a `type` to the protocol, put the record
+in `infrastructure/websocket/dto/`, and send it through `QuoteStreamSessions` — never through a raw
+`WebSocketSession`. The handler translates and nothing more; a client mistake is an `error` frame,
+not a closed connection. Test it as `QuoteStreamHandlerTest` does: mocked use cases, a mocked
+session, assertions on the JSON that comes back.
+
 ## 7. Migration, if the schema changes
 
 New file `src/main/resources/db/migration/V{n}__description.sql`. Never edit an applied migration.
@@ -111,7 +133,8 @@ New file `src/main/resources/db/migration/V{n}__description.sql`. Never edit an 
 ## 8. Integration test (`integration/`)
 
 Add a case that exercises the operation over HTTP against real PostgreSQL — `PortfolioApiIT` for
-portfolio operations, `StockQuoteApiIT` for quotes.
+portfolio operations, `StockQuoteApiIT` for quotes, `QuoteStreamIT` for anything on the live feed
+(a real WebSocket connection to a real server, with the tick shortened).
 
 **Never call a third-party service from a test.** Replace the port with `@MockitoBean`, as
 `StockQuoteApiIT` does. A build must not fail because someone else's API was down or rate-limited.

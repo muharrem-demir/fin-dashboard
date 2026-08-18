@@ -45,6 +45,19 @@ dashboard:
       # can hang. The library reads it once at class-initialisation time.
       connection-timeout-millis: ${QUOTES_TIMEOUT_MS:10000}
 
+    stream:
+      # The realtime feed. One tick fetches the union of every connected client's symbols in a
+      # single upstream call, so the cost is set by this interval, not by how many clients there
+      # are. Nothing is fetched at all while nobody is subscribed.
+      path: /ws/quotes
+      interval-millis: ${QUOTES_STREAM_INTERVAL_MS:3000}
+      # Public market data, no credentials: the feed is as open as the REST API. Narrow this when a
+      # deployment needs it.
+      allowed-origins: ${QUOTES_STREAM_ALLOWED_ORIGINS:*}
+      # A client that stops reading is disconnected rather than allowed to back the feed up.
+      send-time-limit-millis: 5000
+      send-buffer-size-bytes: 524288
+
 server:
   port: ${SERVER_PORT:8080}
   error:
