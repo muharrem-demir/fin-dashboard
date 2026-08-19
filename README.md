@@ -8,6 +8,16 @@ WebSocket and have them pushed to you as they move.
 
 No authentication — the API is open by design.
 
+## AI Assistance
+
+Claude Code ise used for developing this project. 
+
+In the beginning of the development process CLAUDE.md file and .claude folder contents (skills, agents) are created. This provided consistency during adding new features to the project.
+
+As a first step, project's techical requirements are specified. Necessary features are developed by the AI agents, after carefully describing the requirements.
+
+The changes and fixes related to the existing features are also developed by AI agents, again by clearly promtping the requirements.
+
 ## Quick start
 
 ```bash

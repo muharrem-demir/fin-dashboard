@@ -13,7 +13,9 @@ public abstract sealed class DomainException extends RuntimeException
                 InvalidTickerException,
                 PortfolioNotFoundException,
                 StockNotFoundException,
-                StockQuoteUnavailableException {
+                StockQuoteUnavailableException,
+                TickerAlreadyWatchedException,
+                WatchlistEntryNotFoundException {
 
     protected DomainException(String message) {
         super(message);

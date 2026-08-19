@@ -135,6 +135,9 @@ Base path `/api/v1`.
 | `POST`   | `/portfolios/{id}/stocks`           | **adds to** an existing position               |
 | `DELETE` | `/portfolios/{id}/stocks/{ticker}`  | 404 if the ticker is not held                  |
 | `GET`    | `/stocks/quotes?tickers=AAPL,MSFT`  | batch quotes; `&history=true` adds daily closes; 502 when the provider is down |
+| `GET`    | `/watchlist`                        | watched symbols: `id` and `ticker` only         |
+| `POST`   | `/watchlist`                        | 201 + `Location`; 409 if the ticker is watched  |
+| `DELETE` | `/watchlist/{id}`                   | by entry id, not by ticker; 404 if unknown      |
 | `WS`     | `/ws/quotes`                        | live quotes, pushed every 3 s (not under `/api/v1`) |
 
 Portfolio names are deliberately **not** unique — that was never a requirement.
@@ -142,6 +145,31 @@ Portfolio names are deliberately **not** unique — that was never a requirement
 Every error is an RFC 9457 problem document produced by `GlobalExceptionHandler`. Controllers
 contain no error handling. The handler switches exhaustively over the sealed `DomainException`
 hierarchy, so **adding a domain exception without mapping it to a status code is a compile error**.
+
+## Watchlist
+
+Symbols the user follows outside any portfolio. One table, one row per symbol: `id`, `ticker`,
+`created_at`.
+
+**A ticker is on the watchlist once, or not at all.** Adding one that is already there is a 409,
+not a merge and not a silent success — unlike `Portfolio.addStock`, which tops up, because an entry
+carries no quantity and a second add has nothing to add to. The check and the insert run inside one
+`TransactionRunner` block in `AddWatchlistEntryUseCase`, because on their own they are a
+check-then-act two callers could both win. `uq_watchlist_ticker` is the safety net behind that, not
+the implementation.
+
+**The symbol is stored upper case, and `Ticker` is why.** The entry holds a `Ticker`, not a
+`String`, so `aapl` and `AAPL` are the same entry without the watchlist owning a normalisation rule
+of its own — the same rule that makes case-insensitive top-ups work for holdings. A
+`ck_watchlist_ticker_upper` check constraint keeps a row inserted by hand from breaking the
+assumption that makes the unique constraint case-correct without a functional index.
+
+**Deletion is by id, and it is not idempotent.** A wrong id is a 404, so a client learns the delete
+did not happen rather than assuming it did — the same choice `DeletePortfolioUseCase` makes.
+
+`created_at` is stored but never returned: the listing is `id` and `ticker`, and the column exists
+to order it oldest-first. Nothing in the domain decides anything from it, so `WatchlistEntry` does
+not carry it — exactly as `Portfolio` does not carry the portfolio table's timestamps.
 
 ## Browser access (CORS)
 

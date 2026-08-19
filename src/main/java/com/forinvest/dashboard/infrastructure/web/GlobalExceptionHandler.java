@@ -32,6 +32,8 @@ import com.forinvest.dashboard.domain.exception.InvalidTickerException;
 import com.forinvest.dashboard.domain.exception.PortfolioNotFoundException;
 import com.forinvest.dashboard.domain.exception.StockNotFoundException;
 import com.forinvest.dashboard.domain.exception.StockQuoteUnavailableException;
+import com.forinvest.dashboard.domain.exception.TickerAlreadyWatchedException;
+import com.forinvest.dashboard.domain.exception.WatchlistEntryNotFoundException;
 
 /**
  * Translates every failure into an RFC 9457 problem document.
@@ -77,6 +79,15 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                                 "Invalid quote request",
                                 "invalid-quote-request",
                                 e.getMessage());
+                    case WatchlistEntryNotFoundException e ->
+                        problem(
+                                HttpStatus.NOT_FOUND,
+                                "Watchlist entry not found",
+                                "watchlist-entry-not-found",
+                                e.getMessage());
+                    // The request is well formed and the state is fine; it just already happened.
+                    case TickerAlreadyWatchedException e ->
+                        problem(HttpStatus.CONFLICT, "Ticker already exists", "ticker-already-watched", e.getMessage());
                     // The caller did nothing wrong — the market data provider did. 502, not 500.
                     case StockQuoteUnavailableException e ->
                         problem(

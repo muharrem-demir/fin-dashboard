@@ -5,13 +5,16 @@ import org.springframework.context.annotation.Configuration;
 
 import com.forinvest.dashboard.application.port.TransactionRunner;
 import com.forinvest.dashboard.application.usecase.AddStockUseCase;
+import com.forinvest.dashboard.application.usecase.AddWatchlistEntryUseCase;
 import com.forinvest.dashboard.application.usecase.BroadcastQuoteUpdatesUseCase;
 import com.forinvest.dashboard.application.usecase.CreatePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.DeletePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.GetPortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.ListPortfoliosUseCase;
 import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
+import com.forinvest.dashboard.application.usecase.ListWatchlistUseCase;
 import com.forinvest.dashboard.application.usecase.RemoveStockUseCase;
+import com.forinvest.dashboard.application.usecase.RemoveWatchlistEntryUseCase;
 import com.forinvest.dashboard.application.usecase.RenamePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.SubscribeToQuotesUseCase;
 import com.forinvest.dashboard.application.usecase.UnsubscribeFromQuotesUseCase;
@@ -21,6 +24,7 @@ import com.forinvest.dashboard.domain.port.QuoteSubscriptionRegistry;
 import com.forinvest.dashboard.domain.port.QuoteUpdatePublisher;
 import com.forinvest.dashboard.domain.port.StockPriceHistoryProvider;
 import com.forinvest.dashboard.domain.port.StockQuoteProvider;
+import com.forinvest.dashboard.domain.port.WatchlistRepository;
 import com.forinvest.dashboard.infrastructure.quotes.QuoteHistoryProperties;
 
 /**
@@ -69,6 +73,22 @@ class UseCaseConfig {
     RemoveStockUseCase removeStockUseCase(
             PortfolioRepository portfolioRepository, TransactionRunner transactionRunner) {
         return new RemoveStockUseCase(portfolioRepository, transactionRunner);
+    }
+
+    @Bean
+    ListWatchlistUseCase listWatchlistUseCase(WatchlistRepository watchlistRepository) {
+        return new ListWatchlistUseCase(watchlistRepository);
+    }
+
+    @Bean
+    AddWatchlistEntryUseCase addWatchlistEntryUseCase(
+            WatchlistRepository watchlistRepository, TransactionRunner transactionRunner) {
+        return new AddWatchlistEntryUseCase(watchlistRepository, transactionRunner);
+    }
+
+    @Bean
+    RemoveWatchlistEntryUseCase removeWatchlistEntryUseCase(WatchlistRepository watchlistRepository) {
+        return new RemoveWatchlistEntryUseCase(watchlistRepository);
     }
 
     /**
