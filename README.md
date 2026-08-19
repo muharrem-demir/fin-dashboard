@@ -10,7 +10,7 @@ No authentication — the API is open by design.
 
 ## AI Assistance
 
-Claude Code ise used for developing this project. 
+Claude Code ise used for developing this project.
 
 In the beginning of the development process CLAUDE.md file and .claude folder contents (skills, agents) are created. This provided consistency during adding new features to the project.
 
