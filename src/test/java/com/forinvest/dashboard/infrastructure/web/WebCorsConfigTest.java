@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.forinvest.dashboard.application.query.ListStockQuotesQuery;
 import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
 import com.forinvest.dashboard.domain.model.StockQuoteLookup;
+import com.forinvest.dashboard.domain.model.StockQuoteSnapshot;
 import com.forinvest.dashboard.domain.model.Ticker;
 
 /**
@@ -46,7 +47,8 @@ class WebCorsConfigTest {
     @BeforeEach
     void stubUseCase() {
         Mockito.when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(List.of(Ticker.of("AAPL")), List.of()));
+                .thenReturn(StockQuoteSnapshot.withoutHistory(
+                        StockQuoteLookup.reconcile(List.of(Ticker.of("AAPL")), List.of())));
     }
 
     @Test

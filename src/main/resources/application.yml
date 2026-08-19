@@ -61,6 +61,16 @@ dashboard:
       # handshake the quote endpoint requires.
       connection-timeout-millis: ${QUOTES_TIMEOUT_MS:10000}
 
+    history:
+      # How much past price data GET /api/v1/stocks/quotes?history=true answers with, counted in
+      # trading days: a five-day window asked for on a Monday still returns five closes rather than
+      # the two that fall in the last five calendar days.
+      #
+      # It is configuration and not a request parameter on purpose. History is fetched one upstream
+      # call per ticker, so how much of it this deployment buys is an operator's decision, not a
+      # caller's. The live feed never fetches history at all and is unaffected by this setting.
+      days: ${QUOTES_HISTORY_DAYS:5}
+
     stream:
       # The realtime feed. One tick fetches the union of every connected client's symbols in a
       # single upstream call, so the cost is set by this interval, not by how many clients there

@@ -15,10 +15,13 @@ import com.forinvest.dashboard.application.usecase.RemoveStockUseCase;
 import com.forinvest.dashboard.application.usecase.RenamePortfolioUseCase;
 import com.forinvest.dashboard.application.usecase.SubscribeToQuotesUseCase;
 import com.forinvest.dashboard.application.usecase.UnsubscribeFromQuotesUseCase;
+import com.forinvest.dashboard.domain.model.HistoryWindow;
 import com.forinvest.dashboard.domain.port.PortfolioRepository;
 import com.forinvest.dashboard.domain.port.QuoteSubscriptionRegistry;
 import com.forinvest.dashboard.domain.port.QuoteUpdatePublisher;
+import com.forinvest.dashboard.domain.port.StockPriceHistoryProvider;
 import com.forinvest.dashboard.domain.port.StockQuoteProvider;
+import com.forinvest.dashboard.infrastructure.quotes.QuoteHistoryProperties;
 
 /**
  * Wires the use cases into the Spring context.
@@ -68,9 +71,18 @@ class UseCaseConfig {
         return new RemoveStockUseCase(portfolioRepository, transactionRunner);
     }
 
+    /**
+     * The configured history window is turned into a domain value here, at startup. A days setting
+     * outside what {@link HistoryWindow} allows therefore stops the application from starting,
+     * rather than answering the first request that asks for history with a 500.
+     */
     @Bean
-    ListStockQuotesUseCase listStockQuotesUseCase(StockQuoteProvider stockQuoteProvider) {
-        return new ListStockQuotesUseCase(stockQuoteProvider);
+    ListStockQuotesUseCase listStockQuotesUseCase(
+            StockQuoteProvider stockQuoteProvider,
+            StockPriceHistoryProvider stockPriceHistoryProvider,
+            QuoteHistoryProperties historyProperties) {
+        return new ListStockQuotesUseCase(
+                stockQuoteProvider, stockPriceHistoryProvider, HistoryWindow.ofDays(historyProperties.days()));
     }
 
     @Bean

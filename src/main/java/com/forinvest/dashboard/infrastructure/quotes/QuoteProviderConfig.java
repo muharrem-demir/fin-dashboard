@@ -9,13 +9,14 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.forinvest.dashboard.domain.port.StockPriceHistoryProvider;
 import com.forinvest.dashboard.domain.port.StockQuoteProvider;
 
 import tools.jackson.databind.json.JsonMapper;
 
-/** Binds the quote-provider settings and assembles the adapter. Kept beside it so the package is self-contained. */
+/** Binds the quote-provider settings and assembles the adapters. Kept beside them so the package is self-contained. */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(YahooFinanceProperties.class)
+@EnableConfigurationProperties({YahooFinanceProperties.class, QuoteHistoryProperties.class})
 class QuoteProviderConfig {
 
     /**
@@ -27,6 +28,22 @@ class QuoteProviderConfig {
     @Bean
     StockQuoteProvider stockQuoteProvider(JsonMapper jsonMapper, YahooFinanceProperties properties) {
         return new YahooFinanceStockQuoteAdapter(httpClient(properties), jsonMapper, properties);
+    }
+
+    /**
+     * History gets a client of its own, and that is the whole point of building it here too.
+     *
+     * <p>Sharing the quote provider's client would put history traffic through the cookie jar the
+     * crumb is bound to — the jar this configuration goes out of its way not to share. A chart
+     * request that rotated a cookie would invalidate a crumb the quote adapter believes is still
+     * good, and the first symptom would be a live feed failing a tick. Two clients, two jars, and
+     * the two paths cannot disturb each other.
+     */
+    @Bean
+    StockPriceHistoryProvider stockPriceHistoryProvider(
+            JsonMapper jsonMapper, YahooFinanceProperties yahooProperties, QuoteHistoryProperties historyProperties) {
+        return new YahooFinanceStockPriceHistoryAdapter(
+                httpClient(yahooProperties), jsonMapper, yahooProperties, historyProperties);
     }
 
     private static HttpClient httpClient(YahooFinanceProperties properties) {

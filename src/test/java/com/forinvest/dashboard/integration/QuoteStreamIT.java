@@ -200,6 +200,11 @@ class QuoteStreamIT {
         assertThat(Client.symbolsOf(first)).containsExactly("AAPL", "MSFT");
         assertThat(first.get("quotes").get(0).get("percentChange").asDouble()).isEqualTo(10.00);
         assertThat(first.get("timestamp").isNull()).isFalse();
+        // The feed carries quotes and nothing else. History is a REST-only concern, fetched one
+        // upstream call per ticker: a tick that grew one would stop being a function of the
+        // interval alone.
+        assertThat(first.has("history")).isFalse();
+        assertThat(first.get("quotes").get(0).has("history")).isFalse();
 
         // A second update with no further request from the client is what makes this a feed.
         assertThat(Client.symbolsOf(client.next("quotes"))).containsExactly("AAPL", "MSFT");

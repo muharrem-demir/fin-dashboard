@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
@@ -26,8 +27,12 @@ import com.forinvest.dashboard.application.query.ListStockQuotesQuery;
 import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
 import com.forinvest.dashboard.domain.exception.InvalidTickerException;
 import com.forinvest.dashboard.domain.exception.StockQuoteUnavailableException;
+import com.forinvest.dashboard.domain.model.HistoryWindow;
+import com.forinvest.dashboard.domain.model.PriceHistory;
+import com.forinvest.dashboard.domain.model.PricePoint;
 import com.forinvest.dashboard.domain.model.StockQuote;
 import com.forinvest.dashboard.domain.model.StockQuoteLookup;
+import com.forinvest.dashboard.domain.model.StockQuoteSnapshot;
 import com.forinvest.dashboard.domain.model.Ticker;
 
 /** The HTTP contract of {@code /api/v1/stocks/quotes}. */
@@ -46,13 +51,21 @@ class StockQuoteControllerTest {
                 Ticker.of(ticker), new BigDecimal(price), previousClose == null ? null : new BigDecimal(previousClose));
     }
 
+    private static PriceHistory history(String ticker, String... closes) {
+        List<PricePoint> points = new java.util.ArrayList<>();
+        for (int day = 0; day < closes.length; day++) {
+            points.add(new PricePoint(LocalDate.parse("2026-08-10").plusDays(day), new BigDecimal(closes[day])));
+        }
+        return PriceHistory.of(Ticker.of(ticker), points, HistoryWindow.ofDays(5));
+    }
+
     @Test
     @DisplayName("returns price and percent change for each requested ticker")
     void returnsQuotes() throws Exception {
         when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(
                         List.of(Ticker.of("AAPL"), Ticker.of("MSFT")),
-                        List.of(quote("AAPL", "150.25", "148.50"), quote("MSFT", "198.00", "200.00"))));
+                        List.of(quote("AAPL", "150.25", "148.50"), quote("MSFT", "198.00", "200.00")))));
 
         mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL,MSFT"))
                 .andExpect(status().isOk())
@@ -70,7 +83,7 @@ class StockQuoteControllerTest {
     @DisplayName("passes the requested tickers through to the use case")
     void passesTickersToUseCase() throws Exception {
         when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(List.of(), List.of()));
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(List.of(), List.of())));
 
         mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL,MSFT,TSLA"))
                 .andExpect(status().isOk());
@@ -84,7 +97,7 @@ class StockQuoteControllerTest {
     @DisplayName("accepts repeated tickers parameters as well as a comma-separated list")
     void acceptsRepeatedParameters() throws Exception {
         when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(List.of(), List.of()));
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(List.of(), List.of())));
 
         mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL").param("tickers", "MSFT"))
                 .andExpect(status().isOk());
@@ -98,8 +111,8 @@ class StockQuoteControllerTest {
     @DisplayName("omits percentChange when the previous close is unknown")
     void omitsUndefinedPercentChange() throws Exception {
         when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(
-                        List.of(Ticker.of("NEWCO")), List.of(quote("NEWCO", "12.00", null))));
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(
+                        List.of(Ticker.of("NEWCO")), List.of(quote("NEWCO", "12.00", null)))));
 
         mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "NEWCO"))
                 .andExpect(status().isOk())
@@ -111,13 +124,70 @@ class StockQuoteControllerTest {
     @DisplayName("lists tickers the provider had no data for")
     void listsUnresolvedTickers() throws Exception {
         when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
-                .thenReturn(StockQuoteLookup.reconcile(
-                        List.of(Ticker.of("AAPL"), Ticker.of("NOSUCH")), List.of(quote("AAPL", "150.00", "150.00"))));
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(
+                        List.of(Ticker.of("AAPL"), Ticker.of("NOSUCH")), List.of(quote("AAPL", "150.00", "150.00")))));
 
         mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL,NOSUCH"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quoteCount").value(1))
                 .andExpect(jsonPath("$.unresolved[0]").value("NOSUCH"));
+    }
+
+    @Test
+    @DisplayName("omits history entirely, and does not ask for it, unless history=true")
+    void omitsHistoryByDefault() throws Exception {
+        when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
+                .thenReturn(StockQuoteSnapshot.withoutHistory(StockQuoteLookup.reconcile(
+                        List.of(Ticker.of("AAPL")), List.of(quote("AAPL", "150.25", "148.50")))));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.history").doesNotExist());
+
+        ArgumentCaptor<ListStockQuotesQuery> query = ArgumentCaptor.forClass(ListStockQuotesQuery.class);
+        verify(listStockQuotes).execute(query.capture());
+        org.assertj.core.api.Assertions.assertThat(query.getValue().includeHistory())
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("returns daily closes beside the quotes when history=true")
+    void returnsHistoryWhenAsked() throws Exception {
+        StockQuoteLookup lookup =
+                StockQuoteLookup.reconcile(List.of(Ticker.of("AAPL")), List.of(quote("AAPL", "150.25", "148.50")));
+        when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
+                .thenReturn(StockQuoteSnapshot.of(lookup, List.of(history("AAPL", "146.00", "148.50", "150.25"))));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL").param("history", "true"))
+                .andExpect(status().isOk())
+                // The quote itself keeps exactly the shape the live feed sends.
+                .andExpect(jsonPath("$.quotes[0].ticker").value("AAPL"))
+                .andExpect(jsonPath("$.quotes[0].percentChange").value(1.18))
+                .andExpect(jsonPath("$.history[0].ticker").value("AAPL"))
+                .andExpect(jsonPath("$.history[0].days").value(5))
+                .andExpect(jsonPath("$.history[0].points.length()").value(3))
+                .andExpect(jsonPath("$.history[0].points[0].date").value("2026-08-10"))
+                .andExpect(jsonPath("$.history[0].points[0].close").value(146.00))
+                .andExpect(jsonPath("$.history[0].points[2].close").value(150.25));
+
+        ArgumentCaptor<ListStockQuotesQuery> query = ArgumentCaptor.forClass(ListStockQuotesQuery.class);
+        verify(listStockQuotes).execute(query.capture());
+        org.assertj.core.api.Assertions.assertThat(query.getValue().includeHistory())
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("answers with an empty history array when it was asked for and the provider had none")
+    void reportsAskedForButMissingHistory() throws Exception {
+        StockQuoteLookup lookup =
+                StockQuoteLookup.reconcile(List.of(Ticker.of("AAPL")), List.of(quote("AAPL", "150.25", "148.50")));
+        when(listStockQuotes.execute(any(ListStockQuotesQuery.class)))
+                .thenReturn(StockQuoteSnapshot.of(lookup, List.of()));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL").param("history", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.history").isArray())
+                .andExpect(jsonPath("$.history").isEmpty());
     }
 
     @Test

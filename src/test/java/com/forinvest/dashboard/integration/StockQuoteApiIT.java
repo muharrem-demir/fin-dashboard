@@ -1,5 +1,6 @@
 package com.forinvest.dashboard.integration;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -24,8 +25,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.forinvest.dashboard.domain.exception.StockQuoteUnavailableException;
+import com.forinvest.dashboard.domain.model.HistoryWindow;
+import com.forinvest.dashboard.domain.model.PriceHistory;
+import com.forinvest.dashboard.domain.model.PricePoint;
 import com.forinvest.dashboard.domain.model.StockQuote;
 import com.forinvest.dashboard.domain.model.Ticker;
+import com.forinvest.dashboard.domain.port.StockPriceHistoryProvider;
 import com.forinvest.dashboard.domain.port.StockQuoteProvider;
 
 /**
@@ -35,6 +40,9 @@ import com.forinvest.dashboard.domain.port.StockQuoteProvider;
  * fail because a third party rate-limited us, and market data is not deterministic enough to assert
  * on. Everything on our side of the port is real — routing, the use case, the domain calculation,
  * JSON serialisation and the error handler.
+ *
+ * <p>The history provider is replaced for the same reasons, and replacing it is also what keeps a
+ * request for {@code history=true} from reaching Yahoo one call per ticker.
  *
  * <p>{@link YahooFinanceStockQuoteAdapterTest} covers the adapter itself, so the only untested link
  * is the live Yahoo call.
@@ -50,9 +58,21 @@ class StockQuoteApiIT {
     @MockitoBean
     private StockQuoteProvider stockQuoteProvider;
 
+    @MockitoBean
+    private StockPriceHistoryProvider stockPriceHistoryProvider;
+
     private static StockQuote quote(String ticker, String price, String previousClose) {
         return new StockQuote(
                 Ticker.of(ticker), new BigDecimal(price), previousClose == null ? null : new BigDecimal(previousClose));
+    }
+
+    private static PriceHistory history(String ticker, HistoryWindow window, String... closes) {
+        List<PricePoint> points = new java.util.ArrayList<>();
+        for (int day = 0; day < closes.length; day++) {
+            points.add(
+                    new PricePoint(java.time.LocalDate.parse("2026-08-10").plusDays(day), new BigDecimal(closes[day])));
+        }
+        return PriceHistory.of(Ticker.of(ticker), points, window);
     }
 
     @Test
@@ -142,12 +162,63 @@ class StockQuoteApiIT {
     }
 
     @Test
+    @DisplayName("does not ask for history, or return any, unless the request opts in")
+    void omitsHistoryUnlessAsked() throws Exception {
+        when(stockQuoteProvider.findQuotes(anyList())).thenReturn(List.of(quote("AAPL", "150.25", "148.50")));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.history").doesNotExist());
+
+        org.mockito.Mockito.verifyNoInteractions(stockPriceHistoryProvider);
+    }
+
+    @Test
+    @DisplayName("returns daily closes for the configured window when history=true")
+    void returnsHistoryWhenAsked() throws Exception {
+        when(stockQuoteProvider.findQuotes(anyList())).thenReturn(List.of(quote("AAPL", "150.25", "148.50")));
+        ArgumentCaptor<HistoryWindow> window = ArgumentCaptor.captor();
+        when(stockPriceHistoryProvider.findHistories(anyList(), any(HistoryWindow.class)))
+                .thenAnswer(invocation ->
+                        List.of(history("AAPL", invocation.getArgument(1), "146.00", "148.50", "150.25")));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL").param("history", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotes[0].percentChange").value(1.18))
+                .andExpect(jsonPath("$.history[0].ticker").value("AAPL"))
+                // The default configured in application.yml.
+                .andExpect(jsonPath("$.history[0].days").value(5))
+                .andExpect(jsonPath("$.history[0].points.length()").value(3))
+                .andExpect(jsonPath("$.history[0].points[0].date").value("2026-08-10"))
+                .andExpect(jsonPath("$.history[0].points[2].close").value(150.25));
+
+        ArgumentCaptor<List<Ticker>> requested = ArgumentCaptor.captor();
+        verify(stockPriceHistoryProvider, times(1)).findHistories(requested.capture(), window.capture());
+        org.assertj.core.api.Assertions.assertThat(requested.getValue()).containsExactly(Ticker.of("AAPL"));
+        org.assertj.core.api.Assertions.assertThat(window.getValue().days()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("surfaces a history outage as 502, like any other provider failure")
+    void reportsHistoryOutage() throws Exception {
+        when(stockQuoteProvider.findQuotes(anyList())).thenReturn(List.of(quote("AAPL", "150.25", "148.50")));
+        when(stockPriceHistoryProvider.findHistories(anyList(), any(HistoryWindow.class)))
+                .thenThrow(new StockQuoteUnavailableException("Stock price history could not be retrieved"));
+
+        mockMvc.perform(get("/api/v1/stocks/quotes").param("tickers", "AAPL").param("history", "true"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.type").value("https://api.forinvest.com/problems/stock-quotes-unavailable"));
+    }
+
+    @Test
     @DisplayName("the quotes endpoint appears in the generated OpenAPI document")
     void isDocumented() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/v1/stocks/quotes'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/stocks/quotes'].get.responses['502']")
-                        .exists());
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/stocks/quotes'].get.parameters[*].name")
+                        .value(org.hamcrest.Matchers.hasItems("tickers", "history")));
     }
 }

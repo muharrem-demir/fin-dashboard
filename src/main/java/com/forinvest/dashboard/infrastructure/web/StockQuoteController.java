@@ -13,6 +13,7 @@ import com.forinvest.dashboard.application.usecase.ListStockQuotesUseCase;
 import com.forinvest.dashboard.infrastructure.web.dto.StockQuotesResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -49,7 +50,10 @@ class StockQuoteController {
             description = "Fetches quotes for every requested ticker in a single upstream call and returns the price,"
                     + " the previous close and the percent change against it. Ticker matching is case-insensitive"
                     + " and duplicates are collapsed. Tickers the provider has no data for are listed under"
-                    + " `unresolved` rather than being silently dropped.")
+                    + " `unresolved` rather than being silently dropped. Pass `history=true` to also receive"
+                    + " recent daily closes for each ticker; how many trading days that covers is configured"
+                    + " per deployment (`dashboard.quotes.history.days`) and is reported on every history"
+                    + " entry.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Quotes returned"),
         @ApiResponse(
@@ -61,7 +65,15 @@ class StockQuoteController {
                 description = "The market data provider could not be reached or refused the request",
                 content = @Content)
     })
-    ResponseEntity<StockQuotesResponse> listStockQuotes(@RequestParam(name = "tickers") List<String> tickers) {
-        return ResponseEntity.ok(mapper.toResponse(listStockQuotes.execute(new ListStockQuotesQuery(tickers))));
+    ResponseEntity<StockQuotesResponse> listStockQuotes(
+            @RequestParam(name = "tickers") List<String> tickers,
+            @Parameter(
+                            description = "Also return recent daily closes for each ticker. Off by default:"
+                                    + " history costs one upstream call per ticker, so a caller that only wants"
+                                    + " prices should not pay for it.")
+                    @RequestParam(name = "history", defaultValue = "false")
+                    boolean history) {
+        return ResponseEntity.ok(
+                mapper.toResponse(listStockQuotes.execute(new ListStockQuotesQuery(tickers, history))));
     }
 }

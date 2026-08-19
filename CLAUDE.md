@@ -45,11 +45,13 @@ Clean architecture in one Maven module. Dependencies point inward only, and
 com.forinvest.dashboard
 ├── domain/          pure Java — no Spring, no JPA, no Jackson, no Yahoo
 │   ├── model/       Portfolio (aggregate root), Holding, Ticker,
-│   │                StockQuote, StockQuoteLookup, SubscriberId,
+│   │                StockQuote, StockQuoteLookup, StockQuoteSnapshot,
+│   │                PriceHistory, PricePoint, HistoryWindow, SubscriberId,
 │   │                QuoteSubscription, QuoteSubscriptions — all immutable records
 │   ├── exception/   sealed DomainException hierarchy
 │   └── port/        PortfolioRepository       — the domain's view of storage
 │                    StockQuoteProvider        — the domain's view of market data
+│                    StockPriceHistoryProvider — the domain's view of past daily closes
 │                    QuoteSubscriptionRegistry — who is listening right now
 │                    QuoteUpdatePublisher      — pushing one update to one subscriber
 ├── application/     use cases; depends on domain only
@@ -59,7 +61,8 @@ com.forinvest.dashboard
 │   └── port/        TransactionRunner
 └── infrastructure/  every framework lives here, and only here
     ├── persistence/ JPA entities, adapter, mapper — all package-private
-    ├── quotes/      Yahoo Finance adapter, its crumb session + settings — package-private
+    ├── quotes/      Yahoo Finance quote + history adapters, crumb session,
+    │                settings — package-private
     ├── subscription/ in-memory QuoteSubscriptionRegistry adapter — package-private
     ├── websocket/   handler, sessions, publisher, scheduler, message DTOs
     ├── web/         controllers, DTOs, GlobalExceptionHandler
@@ -131,7 +134,7 @@ Base path `/api/v1`.
 | `DELETE` | `/portfolios/{id}`                  | cascades to holdings                           |
 | `POST`   | `/portfolios/{id}/stocks`           | **adds to** an existing position               |
 | `DELETE` | `/portfolios/{id}/stocks/{ticker}`  | 404 if the ticker is not held                  |
-| `GET`    | `/stocks/quotes?tickers=AAPL,MSFT`  | batch quotes; 502 when the provider is down    |
+| `GET`    | `/stocks/quotes?tickers=AAPL,MSFT`  | batch quotes; `&history=true` adds daily closes; 502 when the provider is down |
 | `WS`     | `/ws/quotes`                        | live quotes, pushed every 3 s (not under `/api/v1`) |
 
 Portfolio names are deliberately **not** unique — that was never a requirement.
@@ -200,6 +203,55 @@ Timeout: `dashboard.quotes.yahoo.connection-timeout-millis` (env `QUOTES_TIMEOUT
 10 000), applied to the connect and to each request. The endpoints are configurable too
 (`quote-url`, `crumb-url`, `cookie-url`, `user-agent`) so a test can point at a stub; they are not
 expected to be set in normal operation.
+
+## Historical prices
+
+`GET /api/v1/stocks/quotes?tickers=…&history=true` returns recent daily closes beside the current
+quotes. **History is opt-in and its length is not.** How far back it reaches is
+`dashboard.quotes.history.days` (env `QUOTES_HISTORY_DAYS`, default 5) — one setting for the whole
+deployment, because history costs one upstream call per ticker and how much of it is bought is an
+operator's decision, not a caller's.
+
+**Days are trading days, not calendar days.** A five-day window asked for on a Monday answers with
+five closes, not the two that fall in the last five calendar days. That rule lives in
+`HistoryWindow` (`domain/model/`) and nowhere else: `calendarSpanDays()` sizes the span to ask a
+provider for, `mostRecent(...)` cuts what comes back down to the days actually wanted, sorting
+oldest-first and collapsing a repeated day on the way. Nothing is padded — a symbol that has traded
+for two days has a two-point history, and `days` is reported on every entry so a reader can tell a
+short history from a short window.
+
+`StockPriceHistoryProvider` is a **separate port** from `StockQuoteProvider`, and the split is the
+whole design:
+
+- The quote port promises one upstream call for the entire batch, and the live feed depends on that
+  promise. Yahoo's chart endpoint takes one symbol per request and has no batch form, so history
+  cannot make that promise; giving it its own port keeps the quote contract honest. The requests are
+  issued concurrently and awaited together, so fifty symbols cost roughly one round trip, not fifty.
+- **The streaming path never touches it.** `BroadcastQuoteUpdatesUseCase` talks to
+  `StockQuoteProvider` alone, so a tick of the feed sends exactly the request it always did and its
+  cost stays a function of the tick interval. `QuoteStreamIT` asserts no `history` key ever appears
+  in a pushed frame.
+
+`YahooFinanceStockPriceHistoryAdapter` gets **its own `HttpClient` and cookie jar**, built in
+`QuoteProviderConfig` and not exposed as a bean, for the same reason the quote client is not shared:
+a chart request that rotated a cookie would invalidate a crumb the quote adapter still believes in,
+and the first symptom would be the live feed failing a tick.
+
+Two details in the adapter that are decisions, not defaults:
+
+- **A candle is dated in the exchange's timezone** (`meta.gmtoffset`), not in UTC. Reading a Tokyo
+  session in UTC moves it to the previous day and labels the history with dates no Tokyo trader
+  recognises.
+- **One symbol failing fails the whole call.** A partial answer quietly missing three of five
+  symbols is indistinguishable from three symbols with no data, and a client cannot retry what it
+  was never told had failed. An unknown symbol (404) is still just omitted — that is missing data,
+  not an outage.
+
+History sits **beside** the quotes in the response (`history: [...]`), never inside a
+`StockQuoteResponse`. That record is also the live feed's wire format and must not grow a field it
+would always send empty. `history` is absent when it was not asked for, and `[]` when it was asked
+for and nothing came back — a client can tell "I did not ask" from "there is none", which is the
+same distinction `unresolved` draws for quotes.
 
 ## Realtime quote streaming
 
@@ -278,9 +330,12 @@ Note: Spring Boot 4 splits auto-configuration per technology. Flyway needs
 
 **No test ever calls Yahoo.** A third party rate-limiting us must not fail the build, and live
 market data is not deterministic enough to assert on. `StockQuoteApiIT` and `QuoteStreamIT` replace
-the `StockQuoteProvider` bean with `@MockitoBean`; `YahooFinanceStockQuoteAdapterTest` runs the real
+the `StockQuoteProvider` bean with `@MockitoBean` — and `StockQuoteApiIT` replaces
+`StockPriceHistoryProvider` too, which is what keeps a `history=true` request from fanning out to
+Yahoo one call per ticker; `YahooFinanceStockQuoteAdapterTest` runs the real
 adapter against a `com.sun.net.httpserver.HttpServer` stub on loopback that imitates the cookie,
-crumb and quote endpoints. A stub rather than a mocked `HttpClient`, because the part most likely to
+crumb and quote endpoints, and `YahooFinanceStockPriceHistoryAdapterTest` does the same for the
+chart endpoint. A stub rather than a mocked `HttpClient`, because the part most likely to
 break is the handshake itself, and canned responses would only prove we wrote the code we wrote. The
 only untested link is the live Yahoo call itself.
 
